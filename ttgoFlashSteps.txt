@@ -1,0 +1,17 @@
+Requirements for flashing TTGO Tbeams V1.1s
+------------------------------------------------
+
+Place relevant libararies (from LoRaDrifers GitHub) into Arduino/Libraries
+
+Follow steps here:
+https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html#installing-using-boards-manager
+
+AXP202 library:
+https://github.com/lyusupov/SoftRF/tree/master/software/firmware/source/libraries/AXP202X_Library
+
+Setting up symlinks
+Windows:
+run symlinks.bat from LoRa_drifters directory. This creates symlinks for the libraries shared between master and servant
+Mac/linux (try this from terminal): 
+ln -s loraDrifterMaster/src/ src/
+ln -s loraDrifterServant/src/ src/
