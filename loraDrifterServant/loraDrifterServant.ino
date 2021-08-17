@@ -143,7 +143,7 @@ void setup() {
   }
   delay(50);
 
-  csvFileName="/svt"+String(drifterName)+".csv";
+  csvFileName="/svt" + String(drifterName)+".csv";
   webServerOn = false;
   Serial.println("init ok");
   delay(50);
@@ -174,7 +174,7 @@ void loop() {
     delay(10);
     
     // B. Write data to onboard flash if nSamples is large enough
-    Serial.println("nSamples:" + String(nSamples));
+    // Serial.println("nSamples:" + String(nSamples));
     if(nSamples >= nSamplesFileWrite) {  // only write after collecting a good number of samples
       Serial.println("Dump data into the memory");
       writeData2Flash();
@@ -216,59 +216,74 @@ void writeData2Flash (){
 }
 
 void SerialGPSDecode(Stream &mySerial, TinyGPSPlus &myGPS) {
+  Packet packet;
   // Read GPS and run decoder
-    unsigned long start = millis();
-    do {
-      while(Serial1.available() > 0) {
-        gps.encode(Serial1.read());
-      }
-    } while(millis() - start < 500);
-    // C. If this is a new GPS record then save it
-    if(gps.time.second() != gpsLastSecond) {
-      hour = String(gps.time.hour());
-      minute = String(gps.time.minute());
-      second = String(gps.time.second());
-      year = String(gps.date.year());
-      month = String(gps.date.month());
-      day = String(gps.date.day());
-      if(hour.length() == 1) {
-          hour = "0" + hour;
-      }
-      if(minute.length() == 1) {
-          minute = "0" + minute;
-      }
-      if(second.length() == 1) {
-          second = "0" + second;
-      } 
-      if(month.length() == 1) {
-          month = "0" + month;
-      }
-      if(day.length() == 1) {
-          day = "0" + day;
-      }
-      tDate = year + "-" + month + "-" + day;
-      tTime = hour + ":" + minute + ":" + second;
-      String tLocation = String(gps.location.lng(), 8) + "," + String(gps.location.lat(), 8) + "," + String(gps.location.age());
-      String sendPacket = String(drifterName) + "," + String(drifterTimeSlotSec) + "," + tDate + "," + tTime + "," + tLocation + "," + String(nSamples) + "\n";
-      gpsLastSecond = gps.time.second();
-      if((gps.location.lng() != 0.0) && (gps.location.age() < 1000)) {
-        csvOutStr += tDate + "," + tTime + "," + tLocation + "\n";
-        nSamples += 1;
-        // B. Send GPS data on LoRa if it is this units timeslot
-        if(gps.time.second() == drifterTimeSlotSec) {
-          Serial.println("sending packet via LoRa");
-          Serial.println(sendPacket);
-          csvOutStr += sendPacket; // Save any packets that are sent (debugging purposes).
-          LoRa.beginPacket();
-          LoRa.print(sendPacket);
-          LoRa.endPacket(true);
-          delay(50); // Don't send more than 1 packet
-        }
-      } else {
-        Serial.println(" NO GPS FIX, NOT SENDING OR WRITING ");
-      }
+  unsigned long start = millis();
+  do {
+    while(Serial1.available() > 0) {
+      gps.encode(Serial1.read());
     }
-    delay(50);
+  } while(millis() - start < 500);
+  // C. If this is a new GPS record then save it
+  if(gps.time.second() != gpsLastSecond) {
+    strcpy(packet.name, drifterName.c_str());
+    packet.drifterTimeSlotSec = drifterTimeSlotSec;
+    packet.hour = gps.time.hour();
+    packet.minute = gps.time.minute();
+    packet.second = gps.time.second();
+    packet.year = gps.date.year();
+    packet.month = gps.date.month();
+    packet.day = gps.date.day();
+    packet.lng = gps.location.lng();
+    packet.lat = gps.location.lat();
+    packet.nSamples = nSamples;
+    packet.age = gps.location.age();
+
+    // hour = String(gps.time.hour());
+    // minute = String(gps.time.minute());
+    // second = String(gps.time.second());
+    // year = String(gps.date.year());
+    // month = String(gps.date.month());
+    // day = String(gps.date.day());
+    // if(hour.length() == 1) {
+    //     hour = "0" + hour;
+    // }
+    // if(minute.length() == 1) {
+    //     minute = "0" + minute;
+    // }
+    // if(second.length() == 1) {
+    //     second = "0" + second;
+    // }
+    // if(month.length() == 1) {
+    //     month = "0" + month;
+    // }
+    // if(day.length() == 1) {
+    //     day = "0" + day;
+    // }
+    // tDate = year + "-" + month + "-" + day;
+    // tTime = hour + ":" + minute + ":" + second;
+    // String tLocation = String(gps.location.lng(), 8) + "," + String(gps.location.lat(), 8) + "," + String(gps.location.age());
+    // String sendPacket = String(drifterName) + "," + String(drifterTimeSlotSec) + "," + tDate + "," + tTime + "," + tLocation + "," + String(nSamples) + "\n";
+    gpsLastSecond = gps.time.second();
+    
+    if((gps.location.lng() != 0.0) && (gps.location.age() < 1000)) {
+      // csvOutStr += tDate + "," + tTime + "," + tLocation + "\n";
+      nSamples += 1;
+      // B. Send GPS data on LoRa if it is this units timeslot
+      if(gps.time.second() == drifterTimeSlotSec) {
+        Serial.println("Sending packet via LoRa");
+        // Serial.println(sendPacket);
+        // csvOutStr += sendPacket; // Save any packets that are sent (debugging purposes).
+        LoRa.beginPacket();
+        LoRa.write((const uint8_t*)&packet, sizeof(packet));
+        LoRa.endPacket();
+        delay(50); // Don't send more than 1 packet
+      }
+    } else {
+      Serial.println("NO GPS FIX, NOT SENDING OR WRITING");
+    }
+  }
+  delay(50);
 }
 
 // D3. Web Server Setup
@@ -292,10 +307,10 @@ void startWebServer(const bool webServerOn) {
       for(int ii = 0; ii < paramsNr; ii++) {
         AsyncWebParameter* p = request->getParam(ii);
         if(p->name() == "drifterID") {
-          drifterName=p->value();
+          drifterName = p->value();
         }
         if(p->name() == "loraSendSec") {
-          drifterTimeSlotSec=String(p->value()).toInt();
+          drifterTimeSlotSec = String(p->value()).toInt();
         }
       }
       csvFileName="/svt" + String(drifterName) + ".csv";
@@ -340,19 +355,19 @@ void startWebServer(const bool webServerOn) {
 // Replaces placeholder with button section in your web page
 
 String processor(const String& var) {
-  if(var == "SERVANT") { 
+  if(var == "SERVANT") {
      String servantData = "";
      servantData += "<td>" + csvFileName + "</td>";
      servantData += "<td><a href=\"http://" + IpAddress2String(WiFi.softAPIP()) + "/getServant\"> GET </a></td>";
      servantData += "<td>" + lastFileWrite + "</td>";
      servantData += "<td><a href=\"http://" + IpAddress2String(WiFi.softAPIP()) + "/deleteServant\"> ERASE </a></td>";
      servantData += "</tr>";
-     return servantData;  
+     return servantData;
   }
   if(var == "DRIFTERID") {
     return drifterName;
   }
-  if (var == "LORASENDSEC") {
+  if(var == "LORASENDSEC") {
     return String(drifterTimeSlotSec);
   }
   return String();

@@ -108,18 +108,18 @@ void loop() {
   for(int ii = 0; ii < nServantsMax; ii++) {
     String tTime = String(gps.time.hour()) + ":" + String(gps.time.minute()) + ":" + String(gps.time.second());
     String tDate = String(gps.date.year()) + "-" + String(gps.date.month()) + "-" + String(gps.date.day());
-    // would be better to display only those sending any data and skip non-working servants
-    if(s[ii].ID != -1) {
+    
+    if(s[ii].active) {
       servantsData += "<tr>";
       servantsData += "<td>" + String(s[ii].ID) + "</td>";
-      servantsData += "<td>" + String(s[ii].loraUpdatePlanSec) + "</td>";
+      servantsData += "<td>" + String(s[ii].drifterTimeSlotSec) + "</td>";
       servantsData += "<td>" + String((millis() - s[ii].lastUpdateMasterTime) / 1000) + "</td>";
       servantsData += "<td>" + String(s[ii].hour) + ":" + String(s[ii].minute) + ":" + String(s[ii].second) + "</td>";
-      servantsData += "<td>" + String(s[ii].lon, 6) + "</td>";
+      servantsData += "<td>" + String(s[ii].lng, 6) + "</td>";
       servantsData += "<td>" + String(s[ii].lat, 6) + "</td>";
       servantsData += "<td>" + String(s[ii].dist) + "</td>";
       servantsData += "<td>" + String(s[ii].bear) + "</td>";
-      servantsData += "<td>" + String(s[ii].count) + "</td>";
+      servantsData += "<td>" + String(s[ii].nSamples) + "</td>";
       servantsData += "<td>" + String(s[ii].rssi) + "</td>";
       servantsData += "</tr>";
     }
@@ -136,25 +136,27 @@ void loop() {
 // D. Functions
 // =======================================================================================
 
-void onReceive(int packetSize) {
+void onReceive(int packetsize) {
   // received a packet
-  Serial.print("Received packet:");
-  String recv = "";
-  // read packet
-  for(int ii = 0; ii < packetSize; ii++) {
-    recv += (char)LoRa.read();
+  Serial.println("Received packet:");
+  uint8_t buffer[sizeof(Packet)];
+  for(uint8_t ii = 0; ii < sizeof(Packet); ii++) {
+    buffer[ii] = LoRa.read();
   }
-  Serial.println(recv);
+  Packet * packet;
+  memset(&packet, 0, sizeof(packet));
+  packet = (Packet *)buffer; 
   // Get ID and then send to class for decoding
-  if (recv.substring(0, 1) == "D") {
-    Serial.println(".. valid signal ..");
-    csvOutStr += recv; // Save all packets recevied (debugging purposes)
-    int id = recv.substring(1, 3).toInt();
-    Serial.print("GotID:" + String(id) + " ");
+  String name = String(packet->name);
+  if(!strcmp(name.substring(0, 1).c_str(), "D")) {
+    Serial.println("Drifer signal found!");
+    // csvOutStr += recv; // Save all packets recevied (debugging purposes)
+    int id = name.substring(1, 3).toInt();
     s[id].ID = id;
-    s[id].decode(recv);
+    s[id].decode(packet);
     s[id].rssi = LoRa.packetRssi();
-    s[id].updateDistBear(m.lon, m.lat);
+    s[id].updateDistBear(m.lng, m.lat);
+    s[id].active = true;
     Serial.println("RX from LoRa - decoding completed");
   }
   delay(50);
@@ -172,7 +174,8 @@ void writeData2Flash() {
     if(file.println(csvOutStr)) {
       csvOutStr = "";
       nSamples = 0;
-      Serial.println("Wrote data in file, current size: " + file.size());
+      Serial.println("Wrote data in file, current size: ");
+      Serial.println(file.size());
       lastFileWrite = String(m.hour, DEC) + ":" + String(m.minute, DEC) + ":" + String(m.second, DEC);
     } else {
       lastFileWrite = "FAILED WRITE, RESTARTING";
@@ -199,31 +202,7 @@ void SerialGPSDecode(Stream &mySerial, TinyGPSPlus &myGPS) {
   } while(millis() - start < 500);
 
   if(gps.time.second() != gpsLastSecond) {
-    // Update Master Data
-    hour = String(gps.time.hour());
-    minute = String(gps.time.minute());
-    second = String(gps.time.second());
-    year = String(gps.date.year());
-    month = String(gps.date.month());
-    day = String(gps.date.day());
-    if(hour.length() == 1) {
-       hour = "0" + hour;
-    }
-    if(minute.length() == 1) {
-       minute = "0" + minute;
-    }
-    if(second.length() == 1) {
-       second = "0" + second;
-    } 
-    if(month.length() == 1) {
-       month = "0" + month;
-    }  
-    if(day.length() == 1) {
-       day = "0" + day;
-    }
-    tDate = year + "-" + month + "-" + day;
-    tTime = hour + ":" + minute + ":" + second;
-    m.lon = gps.location.lng();
+    m.lng = gps.location.lng();
     m.lat = gps.location.lat();
     m.year = gps.date.year();
     m.month = gps.date.month();
@@ -232,20 +211,22 @@ void SerialGPSDecode(Stream &mySerial, TinyGPSPlus &myGPS) {
     m.minute = gps.time.minute();
     m.second = gps.time.second();
     m.age = gps.location.age();
-    masterData = "<tr><td>" + tDate + " " + tTime + "</td><td>" + String(m.lon, 6) + "</td><td>" + String(m.lat, 6) + "</td><td>" + String(m.age) + "</td>";
+    tDate = String(m.year) + "-" + String(m.month) + "-" + String(m.day);
+    tTime = String(m.hour) + ":" + String(m.minute) + ":" + String(m.second);
+    masterData =  "<tr><td>" + tDate + " " + tTime + "</td><td>" + String(m.lng, 6) + "</td><td>" + String(m.lat, 6) + "</td><td>" + String(m.age) + "</td>";
     masterData += "<td><a href=\"http://" + IpAddress2String(WiFi.softAPIP()) + "/getMaster\"> GET </a></td>";
     masterData += "<td>" + lastFileWrite + "</td>";
     masterData += "<td><a href=\"http://" + IpAddress2String(WiFi.softAPIP()) + "/deleteMaster\"> ERASE </a></td>";
-    masterData += "</tr>";    
+    masterData += "</tr>";
     // Update String to be written to file
-    if((m.lon != 0.0) && (m.age < 1000)) {
-      csvOutStr += tDate + "," + tTime + "," + String(m.lon, 8) + "," + String(m.lat, 8) + "," + String(m.age) + "\n";
+    if((m.lng != 0.0) && (m.age < 1000)) {
+      csvOutStr += tDate + "," + tTime + "," + String(m.lng, 8) + "," + String(m.lat, 8) + "," + String(m.age) + "\n";
       nSamples += 1;
     } else {
       Serial.println(" NO GPS FIX, not WRITING LOCAL DATA !");
     }
     gpsLastSecond = gps.time.second();
-    Serial.println("nSamples: " + String(nSamples));
+    // Serial.println("nSamples: " + String(nSamples));
   }
 }
 

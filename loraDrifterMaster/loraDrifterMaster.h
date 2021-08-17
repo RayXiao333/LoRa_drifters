@@ -1,3 +1,6 @@
+#ifndef LORADRIFTERMASTER.H
+#define LORADRIFTERMASTER.H
+
 #include "src/loraDrifterLibs/loraDrifter.h"
 
 #define nServantsMax                12       // Maximum number of servant drifters (just for setting array size)
@@ -11,91 +14,74 @@ void loraProcessRXData(int packetSize);
 class Master {
   public:
     Master() = default;
-    float lon = 0.f;
-    float lat = 0.f;
+    double lng = 0.0;
+    double lat = 0.0;
     int year = 0;
-    int month = 0;
-    int day = 0;
-    int hour = 0;
-    int minute = 0;
-    int second = 0;
-    int age = 0;
+    uint16_t month = 0;
+    uint8_t day = 0;
+    uint8_t hour = 0;
+    uint8_t minute = 0;
+    uint8_t second = 0;
+    uint32_t age = 0;
     ~Master() = default;
 };
 
 class Servant {
   public:
     Servant() = default;
-    void decode(String packet);
-    void updateDistBear(const float fromLon, const float fromLat);
+    void decode(Packet * packet);
+    void updateDistBear(const double fromLon, const double fromLat);
     int ID = 0;
-    int loraUpdatePlanSec = 0;
+    int drifterTimeSlotSec = 0;
     int lastUpdateMasterTime = 0;
-    int year = 0;
-    int month = 0;
-    int day = 0;
-    int hour = 0;
-    int minute = 0;
-    int second = 0;
-    float lon = 0.f;
-    float lat = 0.f;
-    int age = 0;
-    int count = 0;
-    float dist = 0.f;
-    float bear = 0.f;
+    uint16_t year = 0;
+    uint8_t month = 0;
+    uint8_t day = 0;
+    uint8_t hour = 0;
+    uint8_t minute = 0;
+    uint8_t second = 0;
+    double lng = 0.0;
+    double lat = 0.0;
+    uint32_t age = 0;
+    int nSamples = 0;
+    float dist = 0.0;
+    float bear = 0.0;
     int rssi = 0;
+    bool active = false;
     ~Servant() = default;
 };
 
-void Servant::updateDistBear(const float fromLon, const float fromLat) {
-   dist = TinyGPSPlus::distanceBetween(fromLat, fromLon, lat, lon);
-   bear = TinyGPSPlus::courseTo(fromLat, fromLon, lat, lon);
+void Servant::updateDistBear(const double fromLon, const double fromLat) {
+   dist = TinyGPSPlus::distanceBetween(fromLat, fromLon, lat, lng);
+   bear = TinyGPSPlus::courseTo(fromLat, fromLon, lat, lng);
 }
 
-void Servant::decode(String packet) {
-  // Example:  D01,15,yyyy-mm-dd,HH:MM:SS,-31.97758433,115.88428733,151,4104
-  
-  // Update Plan
-  int comma1 = packet.indexOf(",");
-  int comma2 = packet.indexOf(",", comma1 + 1);
-  loraUpdatePlanSec = packet.substring(comma1 + 1, comma2).toInt();
-  lastUpdateMasterTime = millis();
+void Servant::decode(Packet * packet) {
+    drifterTimeSlotSec = packet->drifterTimeSlotSec;
+    lastUpdateMasterTime = millis();
+    year = packet->year;
+    month = packet->month;
+    day = packet->day;
+    hour = packet->hour;
+    minute = packet->minute;
+    second = packet->second;
+    lng = packet->lng;
+    lat = packet->lat;
+    age = packet->age;
+    nSamples = packet->nSamples;
 
-  // Date
-  comma1 = comma2;  comma2 = packet.indexOf(",", comma1 + 1);
-  String timeFull = packet.substring(comma1 + 1, comma2);
-  
-  int colon1 = timeFull.indexOf("-");
-  int colon2 = timeFull.indexOf("-", colon1 + 1);
-  year = timeFull.substring(0, colon1).toInt();
-  month = timeFull.substring(colon1 + 1, colon2).toInt();
-  day = timeFull.substring(colon2 + 1).toInt();
-
-  // Time
-  comma1 = comma2;  comma2 = packet.indexOf(",", comma1 + 1);
-  timeFull = packet.substring(comma1 + 1, comma2);
-  
-  colon1 = timeFull.indexOf(":");
-  colon2 = timeFull.indexOf(":", colon1 + 1);
-  hour = timeFull.substring(0, colon1).toInt();
-  minute = timeFull.substring(colon1 + 1, colon2).toInt();
-  second = timeFull.substring(colon2 + 1).toInt();
-  
-  // Longitude
-  comma1 = comma2;  comma2 = packet.indexOf(",", comma1 + 1);
-  lon = packet.substring(comma1 + 1,comma2).toFloat();
-
-  // Latitude
-  comma1 = comma2;  comma2 = packet.indexOf(",", comma1 + 1);
-  lat = packet.substring(comma1 + 1, comma2).toFloat();
-  
- // Age
-  comma1 = comma2;  comma2 = packet.indexOf(",", comma1 + 1);
-  age = packet.substring(comma1 + 1,comma2).toInt();
-
-  // Count
-  comma1 = comma2;  comma2 = packet.indexOf(",", comma1 + 1);
-  count = packet.substring(comma1 + 1, comma2).toInt(); 
+    // Serial.println(drifterTimeSlotSec);
+    // Serial.println(lastUpdateMasterTime);
+    // Serial.println(year);
+    // Serial.println(month);
+    // Serial.println(day);
+    // Serial.println(hour);
+    // Serial.println(minute);
+    // Serial.println(second);
+    // Serial.println(lng);
+    // Serial.println(lat);
+    // Serial.println(age);
+    // Serial.println(nSamples);
 }
 
 // H. This is the string literal for the main web page
@@ -177,3 +163,5 @@ const char index_html[] PROGMEM = R"rawliteral(
   </body>
 </html>
 )rawliteral";
+
+#endif //LORADRIFTERMASTER.H

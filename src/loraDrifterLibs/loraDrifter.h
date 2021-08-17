@@ -1,3 +1,6 @@
+#ifndef LORADRIFTER.H
+#define LORADRIFTER.H
+
 // A. WiFi & Web Server
 #include <WiFi.h>
 #include <AsyncTCP.h>
@@ -52,8 +55,8 @@ bool initPMU() {
         return false;
     }
     /*
-        * The charging indicator can be turned on or off
-        * * * */
+    * The charging indicator can be turned on or off
+    **/
     PMU.setChgLEDMode(AXP20X_LED_OFF);
 
     /*
@@ -64,12 +67,12 @@ bool initPMU() {
     *   PMU.setDCDC1Voltage(3300);
     *   PMU.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
     *
-    * * * */
+    **/
 
     /*
-        *   Turn off unused power sources to save power
-        * **/
-        
+    *  Turn off unused power sources to save power
+    **/
+
     PMU.setPowerOutPut(AXP192_DCDC1, AXP202_OFF);
     PMU.setPowerOutPut(AXP192_DCDC2, AXP202_OFF);
     PMU.setPowerOutPut(AXP192_LDO2, AXP202_OFF);
@@ -116,7 +119,7 @@ void initBoard() {
     
     #ifdef BOARD_LED
       /*
-      * T-BeamV1.0, V1.1 LED defaults to low level as trun on,
+      * T-BeamV1.0, V1.1 LED defaults to low level as turn on,
       * so it needs to be forced to pull up
       * * * * */
       #if LED_ON == LOW
@@ -140,3 +143,22 @@ String IpAddress2String(const IPAddress& ipAddress) {
     String(ipAddress[2]) + String(".") +
     String(ipAddress[3]);
 }
+
+// 3 + 4 + 2 + (1 * 5) + (2 * 8) + 4 + 4 = 38 bytes
+#pragma pack(1) // Fixes padding issues
+struct Packet {
+  char name[3];             // D01
+  int drifterTimeSlotSec;   // 15
+  uint16_t year;
+  uint8_t month;
+  uint8_t day;
+  uint8_t hour;
+  uint8_t minute;
+  uint8_t second;
+  double lng;
+  double lat;
+  uint32_t age;
+  int nSamples;
+};
+
+#endif //LORADRIFTER.H
