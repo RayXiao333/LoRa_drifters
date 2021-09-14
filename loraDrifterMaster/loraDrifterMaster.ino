@@ -19,7 +19,6 @@ int nSamples;                         // Counter for the number of samples gathe
 //int ledPin = 14;
 int gpsLastSecond = -1;
 int webServerPin = BUTTON_PIN;
-String hour, minute, second, year, month, day, tTime, tDate;
 
 // =======================================================================================
 // B. Setup
@@ -98,7 +97,7 @@ void setup() {
 // =======================================================================================
 void loop() {
   // A. LoRa is on interrupt / callback
-    
+
   // B. Read and decode Master GPS
   SerialGPSDecode(Serial1, gps);
   delay(10);
@@ -106,9 +105,6 @@ void loop() {
   // C. Make Servants Data HTML
   servantsData = "";
   for(int ii = 0; ii < nServantsMax; ii++) {
-    String tTime = String(gps.time.hour()) + ":" + String(gps.time.minute()) + ":" + String(gps.time.second());
-    String tDate = String(gps.date.year()) + "-" + String(gps.date.month()) + "-" + String(gps.date.day());
-    
     if(s[ii].active) {
       servantsData += "<tr>";
       servantsData += "<td>" + String(s[ii].ID) + "</td>";
@@ -145,13 +141,13 @@ void onReceive(int packetsize) {
   }
   Packet * packet;
   memset(&packet, 0, sizeof(packet));
-  packet = (Packet *)buffer; 
+  packet = (Packet *)buffer;
   // Get ID and then send to class for decoding
-  String name = String(packet->name);
+  const String name = String(packet->name);
   if(!strcmp(name.substring(0, 1).c_str(), "D")) {
-    Serial.println("Drifer signal found!");
+    Serial.println("Drifter signal found!");
     // csvOutStr += recv; // Save all packets recevied (debugging purposes)
-    int id = name.substring(1, 3).toInt();
+    const int id = name.substring(1, 3).toInt();
     s[id].ID = id;
     s[id].decode(packet);
     s[id].rssi = LoRa.packetRssi();
@@ -188,7 +184,7 @@ void writeData2Flash() {
 
 // D2. Processing the onboard GPS
 // The function:
-//   Reads the GPS for 900ms  (allows interrupts)
+//   Reads the GPS for 500ms  (allows interrupts)
 //   Encodes the data via TinyGPS
 //   Updates the Master data class object
 
@@ -204,6 +200,7 @@ void SerialGPSDecode(Stream &mySerial, TinyGPSPlus &myGPS) {
   if(gps.time.second() != gpsLastSecond) {
     m.lng = gps.location.lng();
     m.lat = gps.location.lat();
+    // TODO: Need to add 8 hours onto gps time
     m.year = gps.date.year();
     m.month = gps.date.month();
     m.day = gps.date.day();
@@ -211,8 +208,30 @@ void SerialGPSDecode(Stream &mySerial, TinyGPSPlus &myGPS) {
     m.minute = gps.time.minute();
     m.second = gps.time.second();
     m.age = gps.location.age();
-    tDate = String(m.year) + "-" + String(m.month) + "-" + String(m.day);
-    tTime = String(m.hour) + ":" + String(m.minute) + ":" + String(m.second);
+
+    #ifdef DEBUG_MODE
+    Serial.print("m.lng: ");
+    Serial.println(m.lng);
+    Serial.print("m.lat: ");
+    Serial.println(m.lat);
+    Serial.print("m.year: ");
+    Serial.println(m.year);
+    Serial.print("m.month: ");
+    Serial.println(m.month);
+    Serial.print("m.day: ");
+    Serial.println(m.day);
+    Serial.print("m.hour: ");
+    Serial.println(m.hour);
+    Serial.print("m.minute: ");
+    Serial.println(m.minute);
+    Serial.print("m.second: ");
+    Serial.println(m.second);
+    Serial.print("m.age: ");
+    Serial.println(m.age);
+    #endif
+
+    const String tDate = String(m.year) + "-" + String(m.month) + "-" + String(m.day);
+    const String tTime = String(m.hour) + ":" + String(m.minute) + ":" + String(m.second);
     masterData =  "<tr><td>" + tDate + " " + tTime + "</td><td>" + String(m.lng, 6) + "</td><td>" + String(m.lat, 6) + "</td><td>" + String(m.age) + "</td>";
     masterData += "<td><a href=\"http://" + IpAddress2String(WiFi.softAPIP()) + "/getMaster\"> GET </a></td>";
     masterData += "<td>" + lastFileWrite + "</td>";
@@ -221,6 +240,10 @@ void SerialGPSDecode(Stream &mySerial, TinyGPSPlus &myGPS) {
     // Update String to be written to file
     if((m.lng != 0.0) && (m.age < 1000)) {
       csvOutStr += tDate + "," + tTime + "," + String(m.lng, 8) + "," + String(m.lat, 8) + "," + String(m.age) + "\n";
+      #ifdef DEBUG_MODE
+      Serial.print("csvOutStr: ");
+      Serial.println(csvOutStr);
+      #endif
       nSamples += 1;
     } else {
       Serial.println(" NO GPS FIX, not WRITING LOCAL DATA !");
@@ -231,7 +254,7 @@ void SerialGPSDecode(Stream &mySerial, TinyGPSPlus &myGPS) {
 }
 
 // D3. Used to update sections of the webpages
-//  Replaces placeholder with button section in your web page
+// Replaces placeholder with button section in your web page
 String processor(const String& var) {
   if (var == "SERVANTS") {  return servantsData;  }
   if (var == "MASTER") {    return masterData;  }

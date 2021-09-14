@@ -15,7 +15,6 @@ int drifterTimeSlotSec = 5; // seconds after start of each GPS minute
 int nSamplesFileWrite = 300;      // Number of samples to store in memory before file write
 const char* ssid = "DrifterServant";   // Wifi ssid and password
 const char* password = "Tracker1";
-String hour, minute, second, year, month, day, tTime, tDate;
 String csvOutStr = "";                 // Buffer for output file
 String lastFileWrite = "";
 AsyncWebServer server(80);
@@ -25,6 +24,7 @@ File file;                            // Data file for the SPIFFS output
 int nSamples;                         // Counter for the number of samples gathered
 int webServerPin = BUTTON_PIN;
 int gpsLastSecond = -1;
+String tTime = "";
 
 int ledState = LED_ON;
 int ledPin = BOARD_LED;
@@ -106,7 +106,7 @@ void setup() {
   initBoard();
   delay(50);
   
-  // B. Setup LEDs for information   
+  // B. Setup LEDs for information
   // Need to setup this part
   // pinMode(BOARD_LED, OUTPUT);
   // digitalWrite(ledPin, ledState);     // will change state when a LoRa packet is received
@@ -193,7 +193,7 @@ void loop() {
 // =======================================================================================
 
 // D0. Write data to flash
-void writeData2Flash (){
+void writeData2Flash() {
   file = SPIFFS.open(csvFileName, FILE_APPEND);
   if(!file) {
     Serial.println("There was an error opening the file for writing");
@@ -215,6 +215,36 @@ void writeData2Flash (){
   delay(50);
 }
 
+// Converts packet data into a string format
+String prepare_csv(Packet * packet) {
+  String hour = String(packet->hour);
+  String minute = String(packet->minute);
+  String second = String(packet->second);
+  const String year = String(packet->year);
+  String month = String(packet->month);
+  String day = String(packet->day);
+  if(hour.length() == 1) {
+    hour = "0" + hour;
+  }
+  if(minute.length() == 1) {
+    minute = "0" + minute;
+  }
+  if(second.length() == 1) {
+    second = "0" + second;
+  }
+  if(month.length() == 1) {
+    month = "0" + month;
+  }
+  if(day.length() == 1) {
+    day = "0" + day;
+  }
+  const String tDate = year + "-" + month + "-" + day;
+  tTime = hour + ":" + minute + ":" + second;
+  const String tLocation = String(gps.location.lng(), 8) + "," + String(gps.location.lat(), 8) + "," + String(gps.location.age());
+  csvOutStr += tDate + "," + tTime + "," + tLocation + "\n";
+  return String(drifterName) + "," + String(drifterTimeSlotSec) + "," + tDate + "," + tTime + "," + tLocation + "," + String(nSamples) + "\n";
+}
+
 void SerialGPSDecode(Stream &mySerial, TinyGPSPlus &myGPS) {
   Packet packet;
   // Read GPS and run decoder
@@ -228,6 +258,7 @@ void SerialGPSDecode(Stream &mySerial, TinyGPSPlus &myGPS) {
   if(gps.time.second() != gpsLastSecond) {
     strcpy(packet.name, drifterName.c_str());
     packet.drifterTimeSlotSec = drifterTimeSlotSec;
+    // TODO: Need to add 8 hours onto gps time
     packet.hour = gps.time.hour();
     packet.minute = gps.time.minute();
     packet.second = gps.time.second();
@@ -238,42 +269,46 @@ void SerialGPSDecode(Stream &mySerial, TinyGPSPlus &myGPS) {
     packet.lat = gps.location.lat();
     packet.nSamples = nSamples;
     packet.age = gps.location.age();
+  
+    #ifdef DEBUG_MODE
+    Serial.print("packet.name: ");
+    Serial.println(packet.name);
+    Serial.print("packet.drifterTimeSlotSec: ");
+    Serial.println(packet.drifterTimeSlotSec);
+    Serial.print("packet.lng: ");
+    Serial.println(packet.lng);
+    Serial.print("packet.lat: ");
+    Serial.println(packet.lat);
+    Serial.print("packet.year: ");
+    Serial.println(packet.year);
+    Serial.print("packet.month: ");
+    Serial.println(packet.month);
+    Serial.print("packet.day: ");
+    Serial.println(packet.day);
+    Serial.print("packet.hour: ");
+    Serial.println(packet.hour);
+    Serial.print("packet.minute: ");
+    Serial.println(packet.minute);
+    Serial.print("packet.second: ");
+    Serial.println(packet.second);
+    Serial.print("packet.age: ");
+    Serial.println(packet.age);
+    Serial.print("packet.nSamples: ");
+    Serial.println(packet.nSamples);
+    #endif
 
-    // hour = String(gps.time.hour());
-    // minute = String(gps.time.minute());
-    // second = String(gps.time.second());
-    // year = String(gps.date.year());
-    // month = String(gps.date.month());
-    // day = String(gps.date.day());
-    // if(hour.length() == 1) {
-    //     hour = "0" + hour;
-    // }
-    // if(minute.length() == 1) {
-    //     minute = "0" + minute;
-    // }
-    // if(second.length() == 1) {
-    //     second = "0" + second;
-    // }
-    // if(month.length() == 1) {
-    //     month = "0" + month;
-    // }
-    // if(day.length() == 1) {
-    //     day = "0" + day;
-    // }
-    // tDate = year + "-" + month + "-" + day;
-    // tTime = hour + ":" + minute + ":" + second;
-    // String tLocation = String(gps.location.lng(), 8) + "," + String(gps.location.lat(), 8) + "," + String(gps.location.age());
-    // String sendPacket = String(drifterName) + "," + String(drifterTimeSlotSec) + "," + tDate + "," + tTime + "," + tLocation + "," + String(nSamples) + "\n";
     gpsLastSecond = gps.time.second();
     
     if((gps.location.lng() != 0.0) && (gps.location.age() < 1000)) {
-      // csvOutStr += tDate + "," + tTime + "," + tLocation + "\n";
       nSamples += 1;
       // B. Send GPS data on LoRa if it is this units timeslot
       if(gps.time.second() == drifterTimeSlotSec) {
         Serial.println("Sending packet via LoRa");
-        // Serial.println(sendPacket);
-        // csvOutStr += sendPacket; // Save any packets that are sent (debugging purposes).
+        csvOutStr += prepare_csv(&packet); // Save any packets that are sent (debugging purposes)
+        #ifdef DEBUG_MODE
+        Serial.print("csvOutStr: ");
+        Serial.println(csvOutStr);
+        #endif
         LoRa.beginPacket();
         LoRa.write((const uint8_t*)&packet, sizeof(packet));
         LoRa.endPacket();

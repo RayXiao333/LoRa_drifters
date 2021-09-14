@@ -7,7 +7,6 @@
 #define nSamplesFileWrite           300      // Number of samples to store in memory before file write
 
 // F. Function definitions
-void loraProcessRXData(int packetSize);
 
 // G. Classes for Master and Servant Data
 
@@ -69,19 +68,20 @@ void Servant::decode(Packet * packet) {
     lat = packet->lat;
     age = packet->age;
     nSamples = packet->nSamples;
-
-    // Serial.println(drifterTimeSlotSec);
-    // Serial.println(lastUpdateMasterTime);
-    // Serial.println(year);
-    // Serial.println(month);
-    // Serial.println(day);
-    // Serial.println(hour);
-    // Serial.println(minute);
-    // Serial.println(second);
-    // Serial.println(lng);
-    // Serial.println(lat);
-    // Serial.println(age);
-    // Serial.println(nSamples);
+    #ifdef DEBUG_MODE
+    Serial.println(drifterTimeSlotSec);
+    Serial.println(lastUpdateMasterTime);
+    Serial.println(year);
+    Serial.println(month);
+    Serial.println(day);
+    Serial.println(hour);
+    Serial.println(minute);
+    Serial.println(second);
+    Serial.println(lng);
+    Serial.println(lat);
+    Serial.println(age);
+    Serial.println(nSamples);
+    #endif
 }
 
 // H. This is the string literal for the main web page
