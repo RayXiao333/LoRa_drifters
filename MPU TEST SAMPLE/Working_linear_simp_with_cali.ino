@@ -7,13 +7,13 @@
  *                    GND   --- GND
  *                    SCL   --- 22
  *                    SDA   --- 21
- * Debug use: by send defferent char by serial to esp32, it will output current states:
+ * Debug use: by send different char by serial to esp32, it will output current states:
  *            "a" :Raw acceleration data,
  *            "A" :Processed acceleration data on Earth Frame
  *            "m" :Yew, Pitch, Roll data(Y axis point to West),
  *            "v" :Velocity data
  *            "P" :Position data
- *            "r" :Rest position data to oringe(xyz=0,0,0).
+ *            "r" :Rest position data to origin(xyz=0,0,0).
 */
 #include "MPU9250.h"
 
