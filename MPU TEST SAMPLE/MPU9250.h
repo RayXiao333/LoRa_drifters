@@ -62,7 +62,7 @@ static constexpr uint8_t MPU9255_WHOAMI_DEFAULT_VALUE {0x73};
 static constexpr uint8_t MPU6500_WHOAMI_DEFAULT_VALUE {0x70};
 
 struct MPU9250Setting {
-    ACCEL_FS_SEL accel_fs_sel {ACCEL_FS_SEL::A16G};
+    ACCEL_FS_SEL accel_fs_sel {ACCEL_FS_SEL::A2G};
     GYRO_FS_SEL gyro_fs_sel {GYRO_FS_SEL::G2000DPS};
     MAG_OUTPUT_BITS mag_output_bits {MAG_OUTPUT_BITS::M16BITS};
     FIFO_SAMPLE_RATE fifo_sample_rate {FIFO_SAMPLE_RATE::SMPL_200HZ};
@@ -93,7 +93,7 @@ class MPU9250_ {
     float mag_bias_factory[3] {0., 0., 0.};
     float mag_bias[3] {0., 0., 0.};  // mag calibration value in MAG_OUTPUT_BITS: 16BITS
     float mag_scale[3] {1., 1., 1.};
-    float magnetic_declination = -7.51;  // Japan, 24th June
+    float magnetic_declination = -4.77;  // Japan： -7.51， China:-4.77, Perth: -1.65
 
     // Temperature
     int16_t temperature_count {0};  // temperature raw count output
@@ -476,10 +476,20 @@ public:
             rpy[2] -= 360.f;
         else if (rpy[2] < -180.f)
             rpy[2] += 360.f;
+			
+		float b11, b12, b13, b21, b22, b23, b31, b32, b33, detA;
+		b11 = 1- 2.0f * ( qy * qy + qz*qz); b12 = 2.0f * (qx*qy - qz*qw); 		b13 = 2.0f * (qx*qz + qy*qw);
+		b21 = 2.0f * (qx*qy + qz*qw);		b22 = 1- 2.0f * ( qx*qx + qz*qz);  	b23 = 2.0f * (qy*qz - qx*qw);
+		b31 = 2.0f * (qx*qz - qy*qw);		b32 = 2.0f * (qy*qz - qx*qw);		b33 = 1- 2.0f * (qx*qx + qy*qy);
+		detA = b11*(b22*b33-b32*b23)-b12*(b21*b33-b23*b31)+b13*(b21*b32-b31*b22);
+		
 
-        lin_acc[0] = a[0] + a31;
-        lin_acc[1] = a[1] + a32;
-        lin_acc[2] = a[2] - a33;
+        //lin_acc[0] = a[0] + a31;
+        //lin_acc[1] = a[1] + a32;
+        //lin_acc[2] = a[2] - a33;
+		lin_acc[0] = (a[0]*b11 + a[1]*b21 + a[2]*b31)/detA;
+		lin_acc[1] = (a[0]*b12 + a[1]*b22 + a[2]*b32)/detA;
+		lin_acc[2] = (a[0]*b13 + a[1]*b23 + a[2]*b33)/detA;
     }
 
     void update_accel_gyro() {
