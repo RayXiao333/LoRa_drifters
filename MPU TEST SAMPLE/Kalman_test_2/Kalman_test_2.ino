@@ -24,8 +24,8 @@
 
 using namespace BLA;
 MPU9250 mpu;
-int sample_period = 50; //in ms
-float T_ = sample_period / 1000; //in Sec
+int sample_period = 100; //in ms
+float T_ = 0.1; //in Sec
 int Freq_acc = 1000 / sample_period; //40Hz
 char in123 = 'a';         // char for input debug
 char incomingByte = 'a';
@@ -111,35 +111,78 @@ void setup() {
     if (gps.encode(*gpsStream++))
       update_ref_location(); //Set first reference location
 
+  //  //Run 2 sec to stablize
+  //  for(int i=0; i<100; i++){
+  //    run_2sec_to_stable();
+  //    delay(T_);
+  //  }
+  //  Initial_Kalman();
 }
+//void loop() {
+//  //if (mpu.update()) {
+//  static uint32_t prev_ms = millis();
+//  static uint32_t imu_ms = millis(); //For reset
+//  if (millis() > prev_ms + sample_period) {
+//
+//    if (millis() == imu_ms + 5000) {
+//      update_ref_location(); //Rest data when 50sec.
+//    }
+//    //Run Kalman with fusion IMU and GPS
+//    Update_Kalman();
+//    if (mpu.update()) {
+//      measure_imu_data();
+//      //Ouput current location in Lat and Lng
+//      get_current_location();
+//      Serial << "Px: " << X_INS(2) << " Py: " << X_INS(3)
+//             << " Vx:" << X_INS(0) << " Vy: " << X_INS(1)
+//             //<< " Lat: " << Lat << " Lng: " << Lng
+//             << " ||Y: " << Y_GPS << "\n";
+//    }
+//#ifdef DEBUG
+//    Serial << " Acc: " << acc << " Yew[0]: " << float(mpu.getYaw() / 180.f * PI)
+//           << " pitch: " << float(mpu.getPitch() / 180.f * PI)
+//           << " Roll: " << float(mpu.getRoll() / 180.f * PI) << " \n ";
+//#endif
+//    prev_ms = millis();
+//  }
+//  //Get GPS data
+//  while (*gpsStream)
+//    if (gps.encode(*gpsStream++))
+//      measure_gps_data();
+//  //}
+//}
+
 void loop() {
   if (mpu.update()) {
     static uint32_t prev_ms = millis();
+    static uint32_t imu_ms = millis(); //For reset
     if (millis() > prev_ms + sample_period) {
-      Serial << "-------------------------------- \n";
-      
+      //Serial << "-------------------------------- \n";
+      if (millis() > imu_ms + 20000) {
+        update_ref_location(); //Rest data when 50sec.
+        imu_ms = millis();
+      }
       //Get GPS data
       while (*gpsStream)
         if (gps.encode(*gpsStream++))
           measure_gps_data();
-      
+
       //Run Kalman with fusion IMU and GPS
-      
       Update_Kalman();
-      Serial << "K_Px: " << X_INS(2) << " K_Py: " << X_INS(3)
-             << " K_Vx: " << X_INS(0) << " K_Vy: " << X_INS(1)
-             << " K_Yew: " << X_INS(5) << "\n";
       if (mpu.update()) measure_imu_data();
       //Ouput current location in Lat and Lng
       get_current_location();
-      Serial << "Lat: " << Lat << " Lng: " << Lng << "\n";
-      
+      Serial << "Px: " << X_INS(2) << " Py: " << X_INS(3)
+             << " Vx:" << X_INS(0) << " Vy: " << X_INS(1)
+             //<< " Lat: " << Lat << " Lng: " << Lng
+             << " ||Y: " << Y_GPS << "\n";
+
 #ifdef DEBUG
       Serial << " Acc: " << acc << " Yew[0]: " << float(mpu.getYaw() / 180.f * PI)
              << " pitch: " << float(mpu.getPitch() / 180.f * PI)
              << " Roll: " << float(mpu.getRoll() / 180.f * PI) << " \n ";
 #endif
-      Serial << "-------------------------------- \n";
+      //Serial << "-------------------------------- \n";
       prev_ms = millis();
     }
   }
@@ -155,26 +198,27 @@ void Initial_Kalman() {
   //Setup initial Guess:
   beta = 0.005;
   float P_0_[8] = {10, 10, 10, 10, 90 * PI / 180, 5, 5, 25 * PI / 180};
-  float R_[3] = {1, 1, PI / 180};
-  float Q_[3] = {1, 1, 0.1 * PI / 180};
+  float R_[3] = {0.1, 0.1, 0.1 * PI / 180};
+  float Q_[3] = {1, 1, 1 * PI / 180};
   for (int i = 0; i < 8; i++) P_0(i, i) =  P_0_[i];
   for (int i = 0; i < 3; i++) R(i, i) =  R_[i];
   for (int i = 0; i < 3; i++) Q(i, i) =  Q_[i];
+  Bias_Predic = {0, 0, 0};
 
-  P.Fill(0.1);    //Initial The cov of error.
+  P = P_0;    //Initial The cov of error.
   H.Fill(0);
   //form: H = {0,0,1,1,1,0,0,0, 0,0,1,1,1,0,0,0, 0,0,1,1,1,0,0,0};
   H = (big_zero.Submatrix<3, 2>(1, 1) || big_I.Submatrix<3, 3>(1, 1) || big_zero.Submatrix<3, 3>(1, 1));
   X_E_Predic.Fill(0);
 
   //Para matrix for IMU(U) and GPS(Y)
-  C_ = {cos(X_INS(5)), sin(X_INS(5)), cos(X_INS(5)), -sin(X_INS(5))};
-  A_E = (big_zero.Submatrix<2, 2>(0, 0) && big_I.Submatrix<2, 2>(0, 0) && big_zero.Submatrix<4, 2>(0, 0)) ||
-        big_zero.Submatrix<8, 3>(0, 0) ||
-        (C_ && big_zero.Submatrix<6, 2>(0, 0)) ||
-        (big_zero.Submatrix<4, 1>(0, 0) && big_I.Submatrix<1, 1>(0, 0) && big_zero.Submatrix<3, 1>(0, 0));
-  B_E = (C_ && big_zero.Submatrix<6, 2>(0, 0)) ||
-        (big_zero.Submatrix<4, 1>(0, 0) && big_I.Submatrix<1, 1>(0, 0) && big_zero.Submatrix<3, 1>(0, 0));
+  Y_E.Fill(0);
+  G_k.Fill(0);
+  X_E_Predic.Fill(0);
+  U_INS.Fill(0);
+  X_INS.Fill(0);
+  Y_GPS.Fill(0);
+
 #ifdef DEBUG_MODE
   Serial << "Initial Kal: \n"
          << "P_0" << P_0 << "\n"
@@ -182,86 +226,61 @@ void Initial_Kalman() {
          << "Q" << Q << "\n"
          << "H" << H << "\n"
          << "X_E_Predic" << X_E_Predic << "\n"
-         << "C_" << C_ << "\n"
+
          << "A_E" << A_E << "\n"
          << "B_E" << B_E << "\n";
 #endif
 }
 
 void Update_Kalman() {
-  //BLA::Matrix<3> X_35 = {X_INS(3), X_INS(4), X_INS(5)};
-  //Y_E = X_35 - Y_GPS;
+  //Parameters update
+  C_ = {cos(X_INS(4)), sin(X_INS(4)), cos(X_INS(4)), -sin(X_INS(4))};
+  A_E = (big_zero.Submatrix<2, 2>(0, 0) && big_I.Submatrix<2, 2>(0, 0) && big_zero.Submatrix<4, 2>(0, 0)) ||
+        big_zero.Submatrix<8, 3>(0, 0) ||
+        (C_ && big_zero.Submatrix<6, 2>(0, 0)) ||
+        (big_zero.Submatrix<4, 1>(0, 0) && big_I.Submatrix<1, 1>(0, 0) && big_zero.Submatrix<3, 1>(0, 0));
+  B_E = (C_ && big_zero.Submatrix<6, 2>(0, 0)) ||
+        (big_zero.Submatrix<4, 1>(0, 0) && big_I.Submatrix<1, 1>(0, 0) && big_zero.Submatrix<3, 1>(0, 0));
+
+
+  //Optimized output X and cov matrix.
+  //Update from input
+  BLA::Matrix<3> U_pre = {acc(0) * 9.81, acc(1) * 9.81, (Yaw[0] - Yaw[1]) / T_};
+  U_INS = U_pre - Bias_Predic;
+  X_INS = {X_INS(0) + T_ * U_INS(0),
+           X_INS(1) + T_ * U_INS(1),
+           0.5 * T_ * X_INS(0) + X_INS(2),
+           0.5 * T_ * X_INS(1) + X_INS(3),
+           X_INS(4) + T_ * U_INS(2)
+          };
+  P = A_E * P * ~A_E + B_E * Q * ~B_E + P_0 * beta;
 
   //Update the kalman para
   for (int i = 0; i < 3; i++ )Y_E(i) = X_INS(2 + i) - Y_GPS(i);
   BLA::Matrix<3, 3> dom = H * P * ~H + R;
   BLA::Matrix<3, 3> dom1 = Invert(dom);
   G_k = P * ~H * dom1;
-  BLA::Matrix<8, 8> I_8;
-  I_8.Fill(1);
-  P = (I_8 - G_k * H) * P;
-  BLA::Matrix<8>Bias_0; Bias_0.Fill(0); Bias_0.Submatrix<1, 5>(0, 0);
+  P = (big_diag - G_k * H) * P;
+  BLA::Matrix<8>Bias_0; Bias_0.Fill(0);
+  for (int i = 0; i < 3; i++) Bias_0(i + 5) = Bias_Predic(i);
   X_E_Predic = Bias_0 + G_k * Y_E;
 
   X_INS -= X_E_Predic.Submatrix<5, 1>(0, 0);
   Bias_Predic = X_E_Predic.Submatrix<3, 1>(5, 0);
-
-  //Update from input
-  BLA::Matrix<3> U_pre = {acc(0) * 9.81, acc(1) * 9.81, (Yaw[0] - Yaw[1]) / T_};
-  U_INS = U_pre - Bias_Predic;
-
-  //Optimized output X and cov matrix.
-  X_INS = {X_INS(0) + T_ * U_INS(0),
-           X_INS(1) + T_ * U_INS(1),
-           1 / 2 * T_ * X_INS(0) + X_INS(2),
-           1 / 2 * T_ * X_INS(1) + X_INS(3),
-           X_INS(4) + T_ * U_INS(3)
-          };
-  P = A_E * P * ~A_E + B_E * Q * ~B_E + P_0 * beta;
-
-/*
- * X = {[V_x],
- *      [V_y],
- *      [P_x],
- *      [P_y],
- *      [Yaw]}
- */
-#ifdef DEBUG_MODE
-  Serial << "Y_E: " << Y_E << "\n"
-         << "H: "   << H   << "\n"
-         << "G_k: " << G_k << "\n"
-         << "X_E_Predic: " << X_E_Predic << "\n"
-         << "Bias_Predic: " << Bias_Predic << "\n"
-         << "U_INS: " << U_INS << "\n"
-         << "X_INS: " << X_INS << "\n"
-         << "P: " <<  P << "\n";
-#endif
-  //#ifdef DEBUG_MODE
-  Serial  << "U_pre: " << U_pre
-          << "U_INS: " << U_INS << "\n";
-  //#endif
-
-
-}
-
-//Record GPS data
-void measure_gps_data() {
-  if (gps.location.isValid()) {
-    //Get GPS measure in meter from ref point.
-    Y_GPS = {get_diff_dist(Lat_o, gps.location.lat()),
-             get_diff_dist(Lng_o, gps.location.lng()),
-             mpu.getYaw() / 180.f * PI
-            };
-  } else Serial.println(F("Location: INVALID"));
-#ifdef DEBUG_MODE
-  Serial << "Lat: " <<  Y_GPS(0)
-         << " Lon: " << Y_GPS(1)
-         << " angle: " << Y_GPS(2) << "\n";
-#endif
-#ifdef DEBUG_MODE
-  Serial << "Lat: " <<  gps.location.lat()
-         << " Lon: " << gps.location.lng() << "\n";
-#endif
+//  #ifdef DEBUG_MODE
+//  Serial << "Y_E: " << Y_E << "\n"
+//         << "H: "   << H   << "\n"
+//         << "G_k: " << G_k << "\n"
+//         << "X_E_Predic: " << X_E_Predic << "\n"
+//         << "Bias_Predic: " << Bias_Predic << "\n"
+//         << "U_pre: [" << U_pre(0) << "; " << U_pre(1) << "; " << U_pre(2) << "] "
+//         << "U_INS: " << U_INS << "\n"
+//         << "Y_GPS: " << Y_GPS << "\n"
+//         << "X_INS: " << X_INS << "\n"
+//         << "P: " <<  P << "\n"
+//         << "Yaw" << Yaw[0] << " C_" << C_ << "\n"
+//         << "----------------------------------------------------\n";
+//  #endif
 }
 
 //Process Acceleration data to earth frame
@@ -297,11 +316,38 @@ void measure_imu_data() {
 #endif
 }
 
+//Record GPS data
+void measure_gps_data() {
+  if (gps.location.isValid()) {
+    //Get GPS measure in meter from ref point.
+    Y_GPS = {get_diff_dist(Lat_o, gps.location.lat()),
+             get_diff_dist(Lng_o, gps.location.lng()),
+             Yaw[0]
+            };
+    Y_GPS = {gps.location.lat(),
+             gps.location.lng(),
+             Yaw[0]
+            };
+  } else Serial.println(F("Location: INVALID"));
+#ifdef DEBUG_MODE
+  Serial << "Lat: " <<  Y_GPS(0)
+         << " Lon: " << Y_GPS(1)
+         << " angle: " << Y_GPS(2) << "\n";
+#endif
+#ifdef DEBUG_MODE
+  Serial << "Lat: " <<  gps.location.lat()
+         << " Lon: " << gps.location.lng() << "\n";
+#endif
+}
+
+
+
 void update_ref_location() {
   if (gps.location.isValid()) {
     Lat_o = gps.location.lat();
     Lng_o = gps.location.lng();
   }
+  X_INS.Fill(0);
 }
 
 float get_diff_dist(float oringe, float update_) {
